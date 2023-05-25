@@ -16,6 +16,9 @@
 #include <string.h>
 #include "pgm.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #define M_PI 3.14159265358979323846
 const int degreeInc = 2;
 const int degreeBins = 180 / degreeInc;
@@ -182,6 +185,12 @@ int main (int argc, char **argv)
   printf("Kernel execution time: %f ms\n", milliseconds);
 
   printf("Done!\n");
+
+
+  // Guardando como png
+  const char* filename = "result.png";
+  int stride = w;  // Apunta a escala en grises
+  stbi_write_png(filename, w, h, 1, h_hough, stride);
 
   
   cudaEventDestroy(start);
