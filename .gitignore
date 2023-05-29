@@ -4,3 +4,5 @@ hough.exp
 hough.lib
 pgm.o
 result.png
+
+.vs/
