@@ -11,10 +11,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <iostream>
+#include <vector>
+
 
 #include <cuda.h>
 #include <string.h>
-#include "pgm.h"
+#include "CImg.h"
+using namespace cimg_library;
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -24,6 +28,42 @@ const int degreeInc = 2;
 const int degreeBins = 180 / degreeInc;
 const int rBins = 100;
 const float radInc = degreeInc * M_PI / 180;
+struct Point {
+    int x;
+    int y;
+};
+
+std::vector<Point> BresenhamLine(int x0, int y0, int x1, int y1) {
+    std::vector<Point> points;
+
+    int dx = std::abs(x1 - x0);
+    int dy = std::abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+
+    while (true) {
+        points.push_back({x0, y0});
+
+        if (x0 == x1 && y0 == y1) {
+            break;
+        }
+
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+
+    return points;
+}
+
+
 //*****************************************************************
 // The CPU function returns a pointer to the accummulator
 void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
@@ -113,11 +153,12 @@ int main (int argc, char **argv)
 {
   int i;
 
-  PGMImage inImg (argv[1]);
+  const char* inputFileName = argv[1];
+  CImg<unsigned char> image(inputFileName);
 
   int *cpuht;
-  int w = inImg.x_dim;
-  int h = inImg.y_dim;
+  int w = image.width();
+  int h = image.height();
 
   float* d_Cos;
   float* d_Sin;
@@ -126,7 +167,7 @@ int main (int argc, char **argv)
   cudaMalloc ((void **) &d_Sin, sizeof (float) * degreeBins);
 
   // CPU calculation
-  CPU_HoughTran(inImg.pixels, w, h, &cpuht);
+  CPU_HoughTran(image.data(), w, h, &cpuht);
 
   // pre-compute values to be stored
   float *pcCos = (float *) malloc (sizeof (float) * degreeBins);
@@ -150,8 +191,7 @@ int main (int argc, char **argv)
   unsigned char *d_in, *h_in;
   int *d_hough, *h_hough;
 
-  h_in = inImg.pixels; // h_in contiene los pixeles de la imagen
-
+  h_in = image.data(); // h_in contiene los pixeles de la imagen
   h_hough = (int *) malloc (degreeBins * rBins * sizeof (int));
 
   cudaMalloc ((void **) &d_in, sizeof (unsigned char) * w * h);
@@ -185,8 +225,113 @@ int main (int argc, char **argv)
   printf("Kernel execution time: %f ms\n", milliseconds);
 
   printf("Done!\n");
+  // Define the threshold for line detection
+  int threshold = 4000;  // Adjust this value as needed
+
+    // Find indices of cells with accumulation values above the threshold
+  std::vector<std::pair<int, int>> indices;
+  for (int i = 0; i < degreeBins; i++) {
+      for (int j = 0; j < rBins; j++) {
+          if (h_hough[i * degreeBins + j] > threshold) {
+              indices.push_back(std::make_pair(i, j));
+          }
+      }
+  }
+
+  // Convert indices to angle and distance values
+  std::vector<float> angle_values;
+  std::vector<float> distance_values;
+  for (const auto& index : indices) {
+      float angle = index.first * degreeInc;
+      float distance = (index.second * rScale) - rMax;
+      angle_values.push_back(angle);
+      distance_values.push_back(distance);
+  }
+  
+// Create a copy of the original image for drawing lines
+cimg_library::CImg<unsigned char> result_image = image;
 
 
+// After obtaining angle_values and distance_values
+std::vector<Point> linePixels;
+for (size_t i = 0; i < angle_values.size(); i++) {
+    float angle = angle_values[i];
+    float distance = distance_values[i];
+    
+    // Calculate the intersection points with the image boundaries
+    int startX, startY, endX, endY;
+
+    if (sin(angle) != 0) {
+        startX = 0;
+        startY = static_cast<int>(-distance / sin(angle));
+        endX = result_image.width() - 1;
+        endY = static_cast<int>((-distance - cos(angle) * result_image.width()) / sin(angle));
+    } else {
+        startX = static_cast<int>(-distance / cos(angle));
+        startY = 0;
+        endX = static_cast<int>((-distance - sin(angle) * result_image.height()) / cos(angle));
+        endY = result_image.height() - 1;
+    }
+
+    // Calculate the real origin of the line
+    int originX = startX;
+    int originY = startY;
+
+    // Adjust the starting and ending points based on the real origin
+    startX -= originX;
+    startY -= originY;
+    endX -= originX;
+    endY -= originY;
+
+    // Bresenham's line drawing algorithm (updated with adjusted starting and ending points)
+    int dx = abs(endX - startX);
+    int dy = abs(endY - startY);
+    int sx = (startX < endX) ? 1 : -1;
+    int sy = (startY < endY) ? 1 : -1;
+    int err = dx - dy;
+    unsigned char gray = 200;  // Specify the color of the line
+
+    // Calculate the length of the line
+    float lineLength = sqrt(pow(endX - startX, 2) + pow(endY - startY, 2));
+
+    while (startX != endX || startY != endY) {
+        // Calculate the current pixel coordinates by adding the real origin
+        int currentX = startX + originX;
+        int currentY = startY + originY;
+
+        // Check if the current pixel lies within the image boundaries
+        if (currentX >= 0 && currentX < result_image.width() && currentY >= 0 && currentY < result_image.height()) {
+            // Calculate the current position along the line
+            float position = sqrt(pow(startX, 2) + pow(startY, 2)) / lineLength;
+
+            // Set the color of the pixel based on the position along the line
+            result_image(currentX, currentY) = gray;
+        }
+
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            startX += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            startY += sy;
+        }
+    }
+    
+    // Use the originX and originY variables for further processing if needed
+}
+
+
+
+// // Print the line pixels
+// for (const auto& point : linePixels) {
+//     std::cout << "(" << point.x << ", " << point.y << ")" << std::endl;
+// }
+
+// Display or save the resulting image with detected lines
+result_image.display();  // Display the image using CImg's built-in display function
+result_image.save("detected_lines.jpg");  // Save the image with detected lines to a file
   // Guardando como png
   const char* filename = "result.png";
   int stride = w;  // Apunta a escala en grises
