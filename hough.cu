@@ -165,7 +165,7 @@ int main (int argc, char **argv)
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  int blockNum = ceil (w * h / 256);
+  int blockNum = ceil ((double)w * (double)h / (double)256);
   cudaEventRecord(start);
   GPU_HoughTran <<< blockNum, 256 >>> (d_in, w, h, d_hough, rMax, rScale, d_Cos, d_Sin);
   cudaEventRecord(stop);

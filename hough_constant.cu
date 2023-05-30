@@ -94,7 +94,7 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
       for (int tIdx = 0; tIdx < degreeBins; tIdx++)
         {
           //DONE utilizar memoria constante para senos y cosenos
-          float r = xCoord * cos(tIdx) + yCoord * sin(tIdx); //probar con esto para ver diferencia en tiempo
+          float r = xCoord * cosf(tIdx) + yCoord * sinf(tIdx); //probar con esto para ver diferencia en tiempo
           // float r = xCoord * d_Cos[tIdx] + yCoord * d_Sin[tIdx];
           int rIdx = (r + rMax) / rScale;
           //debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
@@ -131,8 +131,6 @@ int main (int argc, char **argv)
   // pre-compute values to be stored
   float *pcCos = (float *) malloc (sizeof (float) * degreeBins);
   float *pcSin = (float *) malloc (sizeof (float) * degreeBins);
-  cudaMemcpyToSymbol(d_Cos, pcCos, sizeof (float) * degreeBins);
-  cudaMemcpyToSymbol(d_Sin, pcSin, sizeof (float) * degreeBins);
   float rad = 0;
   for (i = 0; i < degreeBins; i++)
   {
@@ -140,6 +138,8 @@ int main (int argc, char **argv)
     pcSin[i] = sin (rad);
     rad += radInc;
   }
+  cudaMemcpyToSymbol(d_Cos, pcCos, sizeof (float) * degreeBins);
+  cudaMemcpyToSymbol(d_Sin, pcSin, sizeof (float) * degreeBins);
 
   float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
   float rScale = 2 * rMax / rBins;
@@ -167,7 +167,7 @@ int main (int argc, char **argv)
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
-  int blockNum = ceil (w * h / 256);
+  int blockNum = ceil ((double)w * (double)h / (double)256);
   cudaEventRecord(start);
   GPU_HoughTran <<< blockNum, 256 >>> (d_in, w, h, d_hough, rMax, rScale);
   cudaEventRecord(stop);
