@@ -94,7 +94,7 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
       for (int tIdx = 0; tIdx < degreeBins; tIdx++)
         {
           //DONE utilizar memoria constante para senos y cosenos
-          float r = xCoord * cosf(tIdx) + yCoord * sinf(tIdx); //probar con esto para ver diferencia en tiempo
+          float r = xCoord * cosf((double)tIdx) + yCoord * sinf((double)tIdx); //probar con esto para ver diferencia en tiempo
           // float r = xCoord * d_Cos[tIdx] + yCoord * d_Sin[tIdx];
           int rIdx = (r + rMax) / rScale;
           //debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
