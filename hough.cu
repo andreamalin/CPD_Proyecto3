@@ -257,21 +257,28 @@ std::vector<Point> linePixels;
 for (size_t i = 0; i < angle_values.size(); i++) {
     float angle = angle_values[i];
     float distance = distance_values[i];
-    
+    printf("%i: (%f, %f)\n", i, angle, distance);
+    printf("sin: %f, cos: %f\n", sin(angle), cos(angle));
     // Calculate the intersection points with the image boundaries
     int startX, startY, endX, endY;
 
-    if (sin(angle) != 0) {
-        startX = 0;
-        startY = static_cast<int>(-distance / sin(angle));
-        endX = result_image.width() - 1;
-        endY = static_cast<int>((-distance - cos(angle) * result_image.width()) / sin(angle));
+    if (sin(angle) == 0) { // Vertical line
+      startX = static_cast<int>(-distance / cos(angle));
+      endX = static_cast<int>((-distance - sin(angle) * result_image.height()) / cos(angle));
+      startY = 0;
+      endY = result_image.height() - 1;
+    } else if (cos(angle) == 0) { // Horizontal line
+      startX = 0;
+      endX = result_image.width() - 1;
+      startY = static_cast<int>(-distance / sin(angle));
+      endY = static_cast<int>((-distance - cos(angle) * result_image.width()) / sin(angle));
     } else {
-        startX = static_cast<int>(-distance / cos(angle));
-        startY = 0;
-        endX = static_cast<int>((-distance - sin(angle) * result_image.height()) / cos(angle));
-        endY = result_image.height() - 1;
+      startX = static_cast<int>(-distance / cos(angle));
+      endX = static_cast<int>((-distance - sin(angle) * result_image.height()) / cos(angle));
+      startY = static_cast<int>(-distance / sin(angle));
+      endY = static_cast<int>((-distance - cos(angle) * result_image.width()) / sin(angle));
     }
+    printf("Start: (%i, %i), END: (%i, %i)\n", startX, startY, endX, endY);
 
     // Calculate the real origin of the line
     int originX = startX;
@@ -282,6 +289,7 @@ for (size_t i = 0; i < angle_values.size(); i++) {
     startY -= originY;
     endX -= originX;
     endY -= originY;
+    printf("AFTER: Start: (%i, %i), END: (%i, %i)\n", startX, startY, endX, endY);
 
     // Bresenham's line drawing algorithm (updated with adjusted starting and ending points)
     int dx = abs(endX - startX);
