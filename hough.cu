@@ -65,14 +65,14 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
 
   //TODO explicar bien bien esta parte. Dibujar un rectangulo a modo de imagen sirve para visualizarlo mejor
   int xCoord = gloID % w - xCent;
-  int yCoord = yCent - gloID / w;
+  int yCoord = (yCent - gloID / w) * -1;
 
   if (pic[gloID] > 250)
   {
     for (int theta = 0; theta < rMax; theta++)
     {
       float distance = ( (xCoord) * cos((float)theta * DEG2RAD)) + ((yCoord) * sin((double)theta * DEG2RAD));  
-      atomicAdd(acc + (int)((round(distance + rMax) * 180)) + theta, 1); //+1 para este radio distance y este theta
+      atomicAdd(&acc[(int)((round(distance + rMax) * 180)) + theta], 1); //+1 para este radio distance y este theta
     }
   }
 }
