@@ -1,8 +1,6 @@
-all: pgm.o	hough
+all: hough
 
-hough:	hough.cu pgm.o
-	nvcc hough.cu pgm.cpp -o hough
-	./hough cuadrosHough.pgm
+hough:	hough.cu
+	nvcc hough.cu -o hough -I/msys64/home/andre/CImg-3.2.5_pre051823  user32.lib gdi32.lib
+	./hough cuadrosHough.bmp result.bmp
 
-pgm.o:	pgm.cpp
-	g++ -c pgm.cpp -o ./pgm.o
