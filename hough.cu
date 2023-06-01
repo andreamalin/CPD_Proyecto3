@@ -1,12 +1,12 @@
 /*
- ============================================================================
- Author        : G. Barlas
- Version       : 1.0
- Last modified : December 2014
- License       : Released under the GNU GPL 3.0
- Description   :
- To build use  : make
- ============================================================================
+  ============================================================================
+  Author        : G. Barlas
+  Version       : 1.0
+  Last modified : December 2014
+  License       : Released under the GNU GPL 3.0
+  Description   :
+  To build use  : make
+  ============================================================================
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,24 +53,6 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
       }
 }
 
-//*****************************************************************
-// TODO usar memoria constante para la tabla de senos y cosenos
-// inicializarlo en main y pasarlo al device
-//__constant__ float d_Cos[degreeBins];
-//__constant__ float d_Sin[degreeBins];
-
-//*****************************************************************
-//TODO Kernel memoria compartida
-// __global__ void GPU_HoughTranShared(...)
-// {
-//   //TODO
-// }
-//TODO Kernel memoria Constante
-// __global__ void GPU_HoughTranConst(...)
-// {
-//   //TODO
-// }
-
 // GPU kernel. One thread per image pixel is spawned.
 // The accummulator memory needs to be allocated by the host in global memory
 __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale, float *d_Cos, float *d_Sin)
@@ -85,21 +67,14 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
   int xCoord = gloID % w - xCent;
   int yCoord = yCent - gloID / w;
 
-  //TODO eventualmente usar memoria compartida para el acumulador
   if (pic[gloID] > 250)
+  {
+    for (int theta = 0; theta < rMax; theta++)
     {
-      //TODO utilizar memoria constante para senos y cosenos
-      for (int theta = 0; theta < rMax; theta++) {
-        float distance = ( (xCoord) * cos((float)theta * DEG2RAD)) + ((yCoord) * sin((double)theta * DEG2RAD));  
-        //debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
-        atomicAdd(acc + (int)((round(distance + rMax) * 180)) + theta, 1); //+1 para este radio distance y este theta
-      }
+      float distance = ( (xCoord) * cos((float)theta * DEG2RAD)) + ((yCoord) * sin((double)theta * DEG2RAD));  
+      atomicAdd(acc + (int)((round(distance + rMax) * 180)) + theta, 1); //+1 para este radio distance y este theta
     }
-
-  //TODO eventualmente cuando se tenga memoria compartida, copiar del local al global
-  //utilizar operaciones atomicas para seguridad
-  //faltara sincronizar los hilos del bloque en algunos lados
-
+  }
 }
 
 //*****************************************************************
@@ -139,7 +114,6 @@ int main (int argc, char **argv)
   float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
   float rScale = 2 * rMax / 180;
 
-  // TODO eventualmente volver memoria global
   cudaMemcpy(d_Cos, pcCos, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
   cudaMemcpy(d_Sin, pcSin, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
 
