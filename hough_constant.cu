@@ -95,7 +95,7 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
         {
           //DONE utilizar memoria constante para senos y cosenos
           float distance = (xCoord * cosf((float)theta * DEG2RAD)) + (yCoord * sinf((double)theta * DEG2RAD)); //probar con esto para ver diferencia en tiempo
-          // float r = xCoord * d_Cos[tIdx] + yCoord * d_Sin[tIdx];
+          // float distance = (xCoord * d_Cos[theta] * DEG2RAD) + (yCoord * d_Sin[theta] * DEG2RAD);
           //debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
           atomicAdd(&acc[(int)((round(distance + rMax) * 180)) + theta], 1); //+1 para este radio distance y este theta
         }
