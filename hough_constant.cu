@@ -43,12 +43,15 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
         if (pic[idx] > 0) //si pasa thresh, entonces lo marca
           {
             float xCoord = x - xCent;
-            float yCoord = y - yCent; 
-            //printf("CPU: ID: %i; X: %f, Y: %f", idx, xCoord, yCoord);
-            for (int theta = 0; theta < rMax; theta++)
+            float yCoord = y - yCent;
+            //  printf("\nCPU: ID: %i; X: %f, Y: %f", idx, xCoord, yCoord);
+            for (int theta = 0; theta < degreeBins; theta++)
               {
+                // printf("SIN %i: %f\n", theta, (sin((double)theta * DEG2RAD)));
                 float distance = ( (xCoord) * cos((float)theta * DEG2RAD)) + ((yCoord) * sin((double)theta * DEG2RAD));
-                (*acc)[ (int)((round(distance + rMax) * 180)) + theta]++; //+1 para este radio distance y este theta
+                /*if (theta == 90)
+                  printf("\nCPU: ID: %i THETA: %i, DISTANCE: %f", idx, theta, distance);
+                */(*acc)[ (int)((round(distance + rMax) * 180)) + theta]++; //+1 para este radio distance y este theta
               }
           }
       }
@@ -90,13 +93,15 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
 
   if (pic[gloID] > 0)
     {
-      // printf("GPU: ID: %i; X: %i, Y: %i", gloID, xCoord, yCoord);
-      for (int theta = 0; theta < rMax; theta++)
+      //  printf("\nGPU: ID: %i; X: %i, Y: %i", gloID, xCoord, yCoord);
+      for (int theta = 0; theta < degreeBins; theta++)
         {
           //DONE utilizar memoria constante para senos y cosenos
-          float distance = (xCoord * cosf((float)theta * DEG2RAD)) + (yCoord * sinf((double)theta * DEG2RAD)); //probar con esto para ver diferencia en tiempo
-          // float distance = (xCoord * d_Cos[theta] * DEG2RAD) + (yCoord * d_Sin[theta] * DEG2RAD);
-          //debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
+          // float distance = (xCoord * cosf((float)theta * DEG2RAD)) + (yCoord * sinf((double)theta * DEG2RAD)); //probar con esto para ver diferencia en tiempo
+          float distance = (xCoord * d_Cos[theta]) + (yCoord * d_Sin[theta]);
+          /*if (theta == 90)
+            printf("GPU: ID: %i THETA: %i, DISTANCE: %f\n", gloID, theta, distance);
+          *///debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
           atomicAdd(&acc[(int)((round(distance + rMax) * 180)) + theta], 1); //+1 para este radio distance y este theta
         }
     }
@@ -136,8 +141,9 @@ int main (int argc, char **argv)
   float rad = 0;
   for (i = 0; i < degreeBins; i++)
   {
-    pcCos[i] = cos (rad);
-    pcSin[i] = sin (rad);
+    pcCos[i] = cos ((float)i * DEG2RAD);
+    pcSin[i] = sin ((float)i * DEG2RAD);
+    // printf("Sin of %i: %f\n", i, pcSin[i]);
     rad += radInc;
   }
   cudaMemcpyToSymbol(d_Cos, pcCos, sizeof (float) * degreeBins);
