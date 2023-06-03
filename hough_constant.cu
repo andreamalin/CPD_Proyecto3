@@ -63,18 +63,6 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 __constant__ float d_Cos[degreeBins];
 __constant__ float d_Sin[degreeBins];
 
-//*****************************************************************
-//TODO Kernel memoria compartida
-// __global__ void GPU_HoughTranShared(...)
-// {
-//   //TODO
-// }
-//TODO Kernel memoria Constante
-// __global__ void GPU_HoughTranConst(...)
-// {
-//   //TODO
-// }
-
 // GPU kernel. One thread per image pixel is spawned.
 // The accummulator memory needs to be allocated by the host in global memory
 __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale)
@@ -85,11 +73,8 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
   int xCent = w / 2;
   int yCent = h / 2;
 
-  //TODO explicar bien bien esta parte. Dibujar un rectangulo a modo de imagen sirve para visualizarlo mejor
   int xCoord = gloID % w - xCent;
   int yCoord = (yCent - gloID / w) * -1;
-
-  //TODO eventualmente usar memoria compartida para el acumulador
 
   if (pic[gloID] > 0)
     {
@@ -106,10 +91,6 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
         }
     }
 
-  //TODO eventualmente cuando se tenga memoria compartida, copiar del local al global
-  //utilizar operaciones atomicas para seguridad
-  //faltara sincronizar los hilos del bloque en algunos lados
-
 }
 
 //*****************************************************************
@@ -125,12 +106,6 @@ int main (int argc, char **argv)
   int *cpuht;
   int w = image.width();
   int h = image.height();
-
-  // float* d_Cos;
-  // float* d_Sin;
-
-  // cudaMalloc ((void **) &d_Cos, sizeof (float) * degreeBins);
-  // cudaMalloc ((void **) &d_Sin, sizeof (float) * degreeBins);
 
   // CPU calculation
   CPU_HoughTran(image.data(), w, h, &cpuht);
@@ -152,7 +127,6 @@ int main (int argc, char **argv)
   float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
   float rScale = 2 * rMax / rBins;
 
-  // TODO eventualmente volver memoria global
   cudaMemcpy(d_Cos, pcCos, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
   cudaMemcpy(d_Sin, pcSin, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
 
@@ -195,7 +169,6 @@ int main (int argc, char **argv)
 
   printf("Done!\n");
 
-
   // Guardando como png
   CImg<unsigned char> result_image = image;
   unsigned char red[] = {255, 0, 0};
@@ -213,7 +186,6 @@ int main (int argc, char **argv)
     }
   }
 
-    
   for (const auto& index : indices) {
     int r = index.first;
     int t = index.second;
