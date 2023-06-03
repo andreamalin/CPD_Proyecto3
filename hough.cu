@@ -24,13 +24,11 @@ using namespace cimg_library;
   DEG2RAG es la constante para convertir grados a radianes
   degreeBins representa la cantidad de bins en los que se dividen
   180 grados en el acumulador utilizado en la transformada de Hough
-  radInc representa el incremento en radianes
 */
 #define M_PI 3.14159265358979323846
 #define DEG2RAD (M_PI/180.0f)
 const int degreeInc = 2;
 const int degreeBins = 180 / degreeInc;
-const float radInc = degreeInc * DEG2RAD;
 
 //*****************************************************************
 /*
