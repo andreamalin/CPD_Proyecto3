@@ -19,39 +19,69 @@
 #include "CImg.h"
 using namespace cimg_library;
 
+/*
+  M_PI hace referencia al valor numérico Pi
+  DEG2RAG es la constante para convertir grados a radianes
+  degreeBins representa la cantidad de bins en los que se dividen
+  180 grados en el acumulador utilizado en la transformada de Hough
+  radInc representa el incremento en radianes
+*/
 #define M_PI 3.14159265358979323846
 #define DEG2RAD (M_PI/180.0f)
 const int degreeInc = 2;
 const int degreeBins = 180 / degreeInc;
+const float radInc = degreeInc * DEG2RAD;
 const int rBins = 100;
-const float radInc = degreeInc * M_PI / 180;
+
 //*****************************************************************
-// The CPU function returns a pointer to the accummulator
+/*
+  Transformada de Hough en el CPu.
+  Se identifican los pixeles casi blancos y se actualiza el
+  acumulador en función de las líneas detectadas.
+*/
 void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 {
-  float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;  //(w^2 + h^2)/2, radio max equivalente a centro -> esquina
-  *acc = new int[(int)((round(rMax * 2 *180)))];            //el acumulador, conteo depixeles encontrados, 90*180/degInc = 9000
-  memset (*acc, 0, sizeof (int) * (int)((round(rMax * 2 *180)))); //init en ceros
+  /*
+    La distancia máxima desde el centro de la imagen hasta
+    una esquina, haciendo uso de pitágoras
+  */
+  float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
+  /*
+    El tamaño del acumulador se determina multiplicando el radio
+    máximo por 2 y por 180 (grados) (2 grados por bin)
+  */
+  *acc = new int[(int)((round(rMax * 2 *180)))];    
+  memset (*acc, 0, sizeof (int) * (int)((round(rMax * 2 *180))));
 
+  /**
+   * Centro de la imagen horizontal y verticalmente
+  */
   int xCent = w / 2;
   int yCent = h / 2;
 
-  for (int x = 0; x < w; x++) //por cada pixel
-    for (int y = 0; y < h; y++) //...
+  /**
+   * Se recorre cada píxel de la imagen. Si el valor del
+   * píxel es mayor a 250 (considerado casi blanco),
+   * se procede a realizar la transformada de Hough para ese píxel.
+  */
+  for (int x = 0; x < w; x++) 
+    for (int y = 0; y < h; y++)
       {
         int idx = (y * w) + x;
-        if (pic[idx] > 0) //si pasa thresh, entonces lo marca
+
+        if (pic[idx] > 250)
           {
             float xCoord = x - xCent;
             float yCoord = y - yCent;
-            //  printf("\nCPU: ID: %i; X: %f, Y: %f", idx, xCoord, yCoord);
+            
+            /*
+              Se calculan las coordenadas relativas al centro de la imagen y
+              se calcula r = x.cos(theta) + y.sin(theta). Se incrementa el acumulador.
+            */
             for (int theta = 0; theta < degreeBins; theta++)
               {
-                // printf("SIN %i: %f\n", theta, (sin((double)theta * DEG2RAD)));
                 float distance = ( (xCoord) * cos((float)theta * DEG2RAD)) + ((yCoord) * sin((double)theta * DEG2RAD));
-                /*if (theta == 90)
-                  printf("\nCPU: ID: %i THETA: %i, DISTANCE: %f", idx, theta, distance);
-                */(*acc)[ (int)((round(distance + rMax) * 180)) + theta]++; //+1 para este radio distance y este theta
+                (*acc)[ (int)((round(distance + rMax) * 180)) + theta]++;
               }
           }
       }
@@ -62,32 +92,51 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 // inicializarlo en main y pasarlo al device
 __constant__ float d_Cos[degreeBins];
 __constant__ float d_Sin[degreeBins];
-
-// GPU kernel. One thread per image pixel is spawned.
-// The accummulator memory needs to be allocated by the host in global memory
+/*
+  Transformada de Hough en la GPU. Se realiza en paralelo
+  haciendo uso de multiples hilos, donde cada hilo procesa un pixel.
+*/
 __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale)
 {
+  /*
+    Se calcula el ID basado en el indice de bloque e hilo.
+    Si es mayor que el tamaño de la imagen, no se realiza nada.
+  */
   int gloID = blockIdx.x * blockDim.x + threadIdx.x;
   if (gloID > w * h) return;      // in case of extra threads in block
 
+  /**
+   * Centro de la imagen horizontal y verticalmente
+  */
   int xCent = w / 2;
   int yCent = h / 2;
 
+  /*
+    Se calculan las coordenadas relativas al centro de la imagen
+  */
   int xCoord = gloID % w - xCent;
   int yCoord = (yCent - gloID / w) * -1;
 
-  if (pic[gloID] > 0)
+  /**
+   * Si el valor del píxel es mayor a 250 (considerado casi blanco),
+   * se procede a realizar la transformada de Hough para ese píxel.
+  */
+  if (pic[gloID] > 250)
     {
-      //  printf("\nGPU: ID: %i; X: %i, Y: %i", gloID, xCoord, yCoord);
+      /*
+        Se calcula r = x.cos(theta) + y.sin(theta). Se incrementa el acumulador.
+      */
       for (int theta = 0; theta < degreeBins; theta++)
         {
-          //DONE utilizar memoria constante para senos y cosenos
-          // float distance = (xCoord * cosf((float)theta * DEG2RAD)) + (yCoord * sinf((double)theta * DEG2RAD)); //probar con esto para ver diferencia en tiempo
+          // DONE utilizar memoria constante para senos y cosenos
           float distance = (xCoord * d_Cos[theta]) + (yCoord * d_Sin[theta]);
-          /*if (theta == 90)
-            printf("GPU: ID: %i THETA: %i, DISTANCE: %f\n", gloID, theta, distance);
-          *///debemos usar atomic, pero que race condition hay si somos un thread por pixel? explique
-          atomicAdd(&acc[(int)((round(distance + rMax) * 180)) + theta], 1); //+1 para este radio distance y este theta
+          /*
+            Se hace uso de atomicAdd para manejar actualizaciones concurrentes de múltiples hilos.
+            Evitamos race conditions, al hacer que nuestra suma se realice de forma atómica,
+            es decir, que no sea afectada por otros hilos que puedan estar realizando la misma
+            operación en la misma ubicación de memoria. Así, no se mezclan resultados.
+          */
+          atomicAdd(&acc[(int)((round(distance + rMax) * 180)) + theta], 1);
         }
     }
 
@@ -97,12 +146,17 @@ __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float
 int main (int argc, char **argv)
 {
   int i;
-
+  /*
+    En los argumentos, se obtiene la imagen a procesar y el nombre
+    de la imagen final.
+  */
   const char* inputFileName = argv[1];
   const char* outputFileName = argv[2];
-
+  /*
+    Se abre la imagen haciendo uso de CImg
+    Se obtiene su ancho u altura
+  */
   CImg<unsigned char> image(inputFileName);
-
   int *cpuht;
   int w = image.width();
   int h = image.height();
@@ -110,7 +164,10 @@ int main (int argc, char **argv)
   // CPU calculation
   CPU_HoughTran(image.data(), w, h, &cpuht);
 
-  // pre-compute values to be stored
+  /*
+    Se calculan los valores precalculados de coseno y seno
+    (pcCos y pcSin) para su uso posterior en la GPU.
+  */
   float *pcCos = (float *) malloc (sizeof (float) * degreeBins);
   float *pcSin = (float *) malloc (sizeof (float) * degreeBins);
   float rad = 0;
@@ -118,23 +175,25 @@ int main (int argc, char **argv)
   {
     pcCos[i] = cos ((float)i * DEG2RAD);
     pcSin[i] = sin ((float)i * DEG2RAD);
-    // printf("Sin of %i: %f\n", i, pcSin[i]);
     rad += radInc;
   }
   cudaMemcpyToSymbol(d_Cos, pcCos, sizeof (float) * degreeBins);
   cudaMemcpyToSymbol(d_Sin, pcSin, sizeof (float) * degreeBins);
 
+  /*
+    Se reserva memoria en la GPU para los arreglos
+    d_in (datos de entrada de la imagen) y d_hough (acumulador en la GPU).
+  */
   float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
   float rScale = 2 * rMax / rBins;
 
   cudaMemcpy(d_Cos, pcCos, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
   cudaMemcpy(d_Sin, pcSin, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
 
-  // setup and copy data from host to device
   unsigned char *d_in, *h_in;
   int *d_hough, *h_hough;
 
-  h_in = image.data(); // h_in contiene los pixeles de la imagen
+  h_in = image.data(); 
   h_hough = (int *) malloc (sizeof (int) * (int)((round(rMax * 2 * 180))));
 
   cudaMalloc ((void **) &d_in, sizeof (unsigned char) * w * h);
@@ -142,40 +201,48 @@ int main (int argc, char **argv)
   cudaMemcpy (d_in, h_in, sizeof (unsigned char) * w * h, cudaMemcpyHostToDevice);
   cudaMemset (d_hough, 0, sizeof (int) * degreeBins * rBins);
 
-  // execution configuration uses a 1-D grid of 1-D blocks, each made of 256 threads
-  //1 thread por pixel
+  /**
+   * Se toman los tiempos de ejecucion haciendo uso de un cudaEvent
+   */
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
-
+  /*
+    Se configura la cantidad de bloques de acuerdo al tamaño de la imagen
+  */
   int blockNum = ceil ((double)w * (double)h / (double)256);
   cudaEventRecord(start);
   GPU_HoughTran <<< blockNum, 256 >>> (d_in, w, h, d_hough, rMax, rScale);
   cudaEventRecord(stop);
 
-  // get results from device
+  /*
+    Se obtienen los resultados y, se comparan contra los del CPU
+  */
   cudaMemcpy (h_hough, d_hough, sizeof (int) * degreeBins * rBins, cudaMemcpyDeviceToHost);
   cudaEventSynchronize(stop);
 
-  // compare CPU and GPU results
   for (i = 0; i < degreeBins * rBins; i++)
   {
     if (cpuht[i] != h_hough[i])
       printf ("Calculation mismatch at : %i %i %i\n", i, cpuht[i], h_hough[i]);
   }
+
+  /*
+    Se muestra el tiempo de ejecucion en pantalla
+  */
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
   printf("Kernel execution time: %f ms\n", milliseconds);
 
   printf("Done!\n");
 
-  // Guardando como png
+  /**
+   * Se muestra el resultado en pantalla. Para cada índice en el vector,
+   * se revisa si es mayor que el threshold. Si lo es, se guarda la (distancia, angulo).
+  */
   CImg<unsigned char> result_image = image;
   unsigned char red[] = {255, 0, 0};
-
-  int threshold = 200;  // AJUSTAR SEGUN LO NECESARIO
-  // Guardando los valores arriba del threshold
-
+  int threshold = 200; // Ajustable
   float _accu_h = ((sqrt(2.0) * (double)(h>w?h:w)) / 2.0) * 2; 
   std::vector<std::pair<int, int>> indices;
   for(int r=0;r<_accu_h;r++) {
@@ -185,7 +252,9 @@ int main (int argc, char **argv)
       }
     }
   }
-
+  /*
+   * Se calculan las coordenadas de dos puntos que forman una línea detectada en la imagen
+  */
   for (const auto& index : indices) {
     int r = index.first;
     int t = index.second;
@@ -212,11 +281,15 @@ int main (int argc, char **argv)
     result_image.draw_line(x1, y1, x2, y2, red);
   }
 
-  // Display or save the resulting image with detected lines
-  result_image.display();  // Display the image using CImg's built-in display function
-  result_image.save(outputFileName);  // Save the image with detected lines to a file
-
+  /**
+   * Se muestra y se guardan los resultados. 
+   */
+  result_image.display(); 
+  result_image.save(outputFileName); 
   
+  /*
+    Se liberan los recursos.
+  */
   cudaEventDestroy(start);
   cudaEventDestroy(stop);
   cudaFree(d_Cos);
