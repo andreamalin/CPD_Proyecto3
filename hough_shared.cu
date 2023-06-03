@@ -62,14 +62,14 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 
   /**
    * Se recorre cada píxel de la imagen. Si el valor del
-   * píxel es mayor a 250 (considerado casi blanco),
+   * píxel es mayor a 100 (considerado alejado de negro -> blanco),
    * se procede a realizar la transformada de Hough para ese píxel.
   */
   for (int x = 0; x < w; x++)
     for (int y = 0; y < h; y++) 
       {
         int idx = (y * w) + x;
-        if (pic[idx] > 250)
+        if (pic[idx] > 100)
           {
             float xCoord = x - xCent;
             float yCoord = y - yCent;
@@ -136,7 +136,7 @@ __global__ void GPU_HoughTranShared (unsigned char *pic, int w, int h, int *acc,
    * Si el valor del píxel es mayor a 250 (considerado casi blanco),
    * se procede a realizar la transformada de Hough para ese píxel.
   */
-  if (pic[gloID] > 250)
+  if (pic[gloID] > 100)
   {
     /*
       Se calcula r = x.cos(theta) + y.sin(theta). Se incrementa el acumulador.
@@ -271,7 +271,7 @@ int main (int argc, char **argv)
   */
   CImg<unsigned char> result_image = image;
   unsigned char red[] = {255, 0, 0};
-  int threshold = 200; // Ajustable
+  int threshold = 100; // Ajustable
   float _accu_h = ((sqrt(2.0) * (double)(h>w?h:w)) / 2.0) * 2; 
   std::vector<std::pair<int, int>> indices;
   for(int r=0;r<_accu_h;r++)
