@@ -4,5 +4,9 @@ hough.exp
 hough.lib
 pgm.o
 result.png
+result.bmp
 
+*.exe
+*.exp
+*.lib
 .vs/

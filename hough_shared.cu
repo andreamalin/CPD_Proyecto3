@@ -72,9 +72,9 @@ __global__ void GPU_HoughTranShared (unsigned char *pic, int w, int h, int *acc,
   __shared__ int localAcc[sharedSize];                      //el acumulador, conteo depixeles encontrados, 90*180/degInc = 9000
 
   int localID = threadIdx.x;
-  int gloID = blockIdx.x * blockDim.x + threadIdx.x;
+  int gloID = blockIdx.x * blockDim.x + localID;
 
-  for (int i = threadIdx.x; i < sharedSize; i += blockDim.x) 
+  for (int i = localID; i < sharedSize; i += blockDim.x) 
     localAcc[i] = 0;
 
   if (gloID > w * h) return;                                // in case of extra threads in block
@@ -90,15 +90,15 @@ __global__ void GPU_HoughTranShared (unsigned char *pic, int w, int h, int *acc,
   {
     for (int theta = 0; theta < degreeBins; theta++)
     {
-      float r = xCoord * d_Cos[theta] + yCoord * d_Sin[theta];
       float distance = (xCoord * d_Cos[theta]) + (yCoord * d_Sin[theta]);
       atomicAdd(&localAcc[(int)((round(distance + rMax) * 180)) + theta], 1); //+1 para este radio distance y este theta
     }
   }
 
   __syncthreads();
-  for (int i = threadIdx.x; i < sharedSize; i += blockDim.x) 
+  for (int i = localID; i < sharedSize; i += blockDim.x) 
   {
+    if (localAcc[i] == 0) { continue; }
     atomicAdd(acc, localAcc[i]);
   }
 }
